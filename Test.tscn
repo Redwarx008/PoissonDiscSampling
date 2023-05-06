@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://cm1fkv1axa4kw"]
+
+[ext_resource type="Script" path="res://Test.cs" id="1_ysqfb"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_ysqfb")
+_radius = 0.5
