@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 public static class PoissonDiscSampling
 {
     public static int BlockSize { get; set; } = 32;
+
     public static List<Vector2> GeneratePoints(float radius, Rect2I region, int attemptNum = 30, Image mask = null)
     {
         List<Vector2> points = new List<Vector2>();
@@ -17,7 +18,26 @@ public static class PoissonDiscSampling
         float cellSize = radius / MathF.Sqrt(2);
         int[,] grid = new int[(int)MathF.Ceiling(region.Size.X / cellSize), (int)MathF.Ceiling(region.Size.Y / cellSize)];
 
-        pendingPoints.Add(new Vector2(region.Position.X + cellSize / 2, region.Position.Y + cellSize / 2));
+        // find the first valid point
+        if (mask != null)
+        {
+            for (int y = region.Position.Y; y < region.Position.Y + region.Size.Y; ++y)
+            {
+                for (int x = region.Position.X; x < region.Position.X + region.Size.X; ++x)
+                {
+                    if (mask.GetPixel(x, y).R8 != 0)
+                    {
+                        pendingPoints.Add(new Vector2(x, y));
+                    }
+                }
+            }
+        }
+        else
+        {
+            pendingPoints.Add(new Vector2((region.Position.X + region.Size.X) / 2, (region.Position.Y + region.Size.Y) / 2));
+        }
+
+
         Random rnd = new Random();
         while (pendingPoints.Count > 0)
         {
@@ -36,8 +56,8 @@ public static class PoissonDiscSampling
                 {
                     points.Add(pendingPoint);
                     pendingPoints.Add(pendingPoint);
-                    grid[(int)((pendingPoint.X - region.Position.X)/ cellSize), 
-                        (int)((pendingPoint.Y - region.Position.Y)/ cellSize)] = points.Count;
+                    grid[(int)((pendingPoint.X - region.Position.X) / cellSize),
+                        (int)((pendingPoint.Y - region.Position.Y) / cellSize)] = points.Count;
                     isValid = true;
                     break;
                 }
@@ -49,6 +69,7 @@ public static class PoissonDiscSampling
         }
         return points;
     }
+
     public static ConcurrentBag<Vector2> GeneratePointsParallel(float radius, Rect2I region, int attemptNum = 30, Image mask = null)
     {
         ConcurrentBag<Vector2> points = new ConcurrentBag<Vector2>();
@@ -56,10 +77,13 @@ public static class PoissonDiscSampling
         List<Rect2I> regions = new();
 
         int regionXEnd = region.Position.X + region.Size.X;
-        int regionYEnd = region.Position.Y + region.Size.Y; 
-        for (int y = region.Position.Y; y < regionYEnd; y += BlockSize)
+        int regionYEnd = region.Position.Y + region.Size.Y;
+
+        int blockXCount = 0;
+        int blockYCount = 0;
+        for (int y = region.Position.Y; y < regionYEnd; y += BlockSize, ++blockYCount)
         {
-            for (int x = region.Position.X; x < regionXEnd; x += BlockSize)
+            for (int x = region.Position.X; x < regionXEnd; x += BlockSize, ++blockXCount)
             {
                 int subRegionWidth = Math.Min(BlockSize, regionXEnd - x);
                 int subRegionHeight = Math.Min(BlockSize, regionYEnd - y);
@@ -70,12 +94,76 @@ public static class PoissonDiscSampling
 
         Parallel.For(0, regions.Count, i =>
         {
-            List<Vector2> subPoints = GeneratePoints(radius, regions[i], attemptNum, mask);
+            List<Vector2> subPoints = GeneratePointsParallelPartial(radius, i, blockXCount, blockYCount, regions[i], attemptNum, mask);
             foreach (Vector2 point in subPoints)
             {
                 points.Add(point);
             }
         });
+        return points;
+    }
+    private static List<Vector2> GeneratePointsParallelPartial(float radius, int index, int blockXCount, int blockYCount,
+        Rect2I region, int attemptNum = 30, Image mask = null)
+    {
+        List<Vector2> points = new List<Vector2>();
+        List<Vector2> pendingPoints = new List<Vector2>();
+
+        float cellSize = radius / MathF.Sqrt(2);
+
+        // In order not to overlap at the border.
+        int gridWidth = index % blockXCount != blockXCount - 1 ? (int)MathF.Ceiling(region.Size.X / cellSize) - 1 : (int)MathF.Ceiling(region.Size.X / cellSize);
+        int gridHeight = index / blockXCount != blockYCount - 1 ? (int)MathF.Ceiling(region.Size.Y / cellSize) - 1 : (int)MathF.Ceiling(region.Size.Y / cellSize);
+        int[,] grid = new int[gridWidth, gridHeight];
+
+        // find the first valid point
+        if (mask != null)
+        {
+            for (int y = region.Position.Y; y < region.Position.Y + region.Size.Y; ++y)
+            {
+                for (int x = region.Position.X; x < region.Position.X + region.Size.X; ++x)
+                {
+                    if (mask.GetPixel(x, y).R8 != 0)
+                    {
+                        pendingPoints.Add(new Vector2(x, y));
+                    }
+                }
+            }
+        }
+        else
+        {
+            pendingPoints.Add(new Vector2((region.Position.X + region.Size.X) / 2, (region.Position.Y + region.Size.Y) / 2));
+        }
+
+
+        Random rnd = new Random();
+        while (pendingPoints.Count > 0)
+        {
+            //int pendingIndex = rnd.Next(pendingPoints.Count);
+            int pendingIndex = 0;
+            Vector2 pendingCenter = pendingPoints[pendingIndex];
+
+            bool isValid = false;
+
+            for (int i = 0; i < attemptNum; ++i)
+            {
+                float angle = rnd.NextSingle() * MathF.PI * 2;
+                Vector2 dir = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                Vector2 pendingPoint = pendingCenter + dir * (rnd.NextSingle() * 2 * radius + radius);
+                if (IsValidPoint(pendingPoint, region, cellSize, radius, points, grid, mask))
+                {
+                    points.Add(pendingPoint);
+                    pendingPoints.Add(pendingPoint);
+                    grid[(int)((pendingPoint.X - region.Position.X) / cellSize),
+                        (int)((pendingPoint.Y - region.Position.Y) / cellSize)] = points.Count;
+                    isValid = true;
+                    break;
+                }
+            }
+            if (!isValid)
+            {
+                pendingPoints.RemoveAt(pendingIndex);
+            }
+        }
         return points;
     }
     private static bool IsValidPoint(in Vector2 pendingPoint, in Rect2I region, float cellSize,
@@ -89,18 +177,25 @@ public static class PoissonDiscSampling
         {
             return false;
         }
-        if(mask != null && mask.GetPixel((int)pendingPoint.X, (int)pendingPoint.Y).R8 == 0)
+        if (mask != null && mask.GetPixel((int)pendingPoint.X, (int)pendingPoint.Y).R8 == 0)
         {
             return false;
         }
 
-        int cellX = (int)((pendingPoint.X - region.Position.X)/ cellSize);
+        int cellX = (int)((pendingPoint.X - region.Position.X) / cellSize);
         int cellY = (int)((pendingPoint.Y - region.Position.Y) / cellSize);
 
+        int gridXCount = grid.GetLength(0) - 1;
+        int gridYCount = grid.GetLength(1) - 1; 
+        if (cellX > gridXCount || cellY > gridYCount)
+        {
+            return false;
+        }
+
         int boundStartX = 0;
-        int boundEndX = (int)(region.Size.X / cellSize);
+        int boundEndX = gridXCount;
         int boundStartY = 0;
-        int boundEndY = (int)(region.Size.Y / cellSize);
+        int boundEndY = gridYCount;
 
         int searchStartX = Math.Max(boundStartX, cellX - 2);
         int searchEndX = Math.Min(cellX + 2, boundEndX);

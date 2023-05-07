@@ -63,7 +63,7 @@ public partial class Test : Node
 	private MultiMesh GenerateMultiMesh()
 	{
         Stopwatch stopwatch = Stopwatch.StartNew();
-        List<Vector2> points = PoissonDiscSampling.GeneratePoints(Radius, _region, _attemptNum, _mask).ToList();
+        List<Vector2> points = PoissonDiscSampling.GeneratePointsParallel(Radius, _region, _attemptNum, _mask).ToList();
 
         stopwatch.Stop();
         GD.Print($"GeneratePoints cost: {stopwatch.ElapsedMilliseconds} ms");
