@@ -89,7 +89,7 @@ public partial class Test : Node
 
 	private MultiMesh _multiMesh;
 
-	private delegate IEnumerable<Vector2> GeneratePointsFunction(float radius, Rect2I region, 
+	private delegate List<Vector2> GeneratePointsFunction(float radius, Rect2I region, 
 		int attemptNum = 30, Image mask = null);
 
     private GeneratePointsFunction _generatePointsFunction = PoissonDiscSampling.GeneratePointsParallel;
@@ -125,7 +125,7 @@ public partial class Test : Node
 	{
         Stopwatch stopwatch = Stopwatch.StartNew();
 
-        IEnumerable<Vector2> points = _generatePointsFunction(Radius, _region, _attemptNum);
+        List<Vector2> points = _generatePointsFunction(Radius, _region, _attemptNum);
 
         stopwatch.Stop();
 
@@ -133,7 +133,7 @@ public partial class Test : Node
 
         stopwatch.Restart();
 
-		int pointCount = points.Count();
+		int pointCount = points.Count;
         _multiMesh.InstanceCount = pointCount;
 
 		int index = 0;

@@ -70,9 +70,9 @@ public static class PoissonDiscSampling
         return points;
     }
 
-    public static ConcurrentBag<Vector2> GeneratePointsParallel(float radius, Rect2I region, int attemptNum = 30, Image mask = null)
+    public static List<Vector2> GeneratePointsParallel(float radius, Rect2I region, int attemptNum = 30, Image mask = null)
     {
-        ConcurrentBag<Vector2> points = new ConcurrentBag<Vector2>();
+        ConcurrentBag<List<Vector2>> pointLists = new();
 
         List<Rect2I> regions = new();
 
@@ -95,11 +95,13 @@ public static class PoissonDiscSampling
         Parallel.For(0, regions.Count, i =>
         {
             List<Vector2> subPoints = GeneratePointsParallelPartial(radius, i, blockXCount, blockYCount, regions[i], attemptNum, mask);
-            foreach (Vector2 point in subPoints)
-            {
-                points.Add(point);
-            }
+            pointLists.Add(subPoints);
         });
+        List<Vector2> points = new();
+        foreach(var list in pointLists)
+        {
+            points.AddRange(list);
+        }
         return points;
     }
     private static List<Vector2> GeneratePointsParallelPartial(float radius, int index, int blockXCount, int blockYCount,
