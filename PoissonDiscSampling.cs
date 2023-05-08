@@ -34,7 +34,7 @@ public static class PoissonDiscSampling
         }
         else
         {
-            pendingPoints.Add(new Vector2((region.Position.X + region.Size.X) / 2, (region.Position.Y + region.Size.Y) / 2));
+            pendingPoints.Add(new Vector2(region.Position.X + region.Size.X / 2, region.Position.Y + region.Size.Y / 2));
         }
 
 
@@ -131,7 +131,7 @@ public static class PoissonDiscSampling
         }
         else
         {
-            pendingPoints.Add(new Vector2((region.Position.X + region.Size.X) / 2, (region.Position.Y + region.Size.Y) / 2));
+            pendingPoints.Add(new Vector2(region.Position.X + region.Size.X / 2, region.Position.Y + region.Size.Y / 2));
         }
 
 
@@ -185,17 +185,17 @@ public static class PoissonDiscSampling
         int cellX = (int)((pendingPoint.X - region.Position.X) / cellSize);
         int cellY = (int)((pendingPoint.Y - region.Position.Y) / cellSize);
 
-        int gridXCount = grid.GetLength(0) - 1;
-        int gridYCount = grid.GetLength(1) - 1; 
-        if (cellX > gridXCount || cellY > gridYCount)
+        int gridXCount = grid.GetLength(0);
+        int gridYCount = grid.GetLength(1); 
+        if (cellX > gridXCount - 1|| cellY > gridYCount - 1)
         {
             return false;
         }
 
         int boundStartX = 0;
-        int boundEndX = gridXCount;
+        int boundEndX = gridXCount - 1;
         int boundStartY = 0;
-        int boundEndY = gridYCount;
+        int boundEndY = gridYCount - 1;
 
         int searchStartX = Math.Max(boundStartX, cellX - 2);
         int searchEndX = Math.Min(cellX + 2, boundEndX);

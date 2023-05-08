@@ -6,7 +6,7 @@ using System.Linq;
 
 [Tool]
 public partial class Test : Node
-{
+{ 
 	[Export]
 	public float Radius
 	{
@@ -18,28 +18,82 @@ public partial class Test : Node
 				return;
 			}
 			_radius = value;
-			MultiMesh multiMesh = GenerateMultiMesh();
-			_meshInstance.Multimesh = multiMesh;
+			UpdateMultiMesh();
 		}
 	}
 	private float _radius = 0.5f;
 	[Export]
+	public int AttemptNum
+	{
+		get => _attemptNum;
+		set
+		{
+			if(_attemptNum == value)
+			{
+				return;
+			}
+			_attemptNum = value;
+			UpdateMultiMesh();
+		}
+	}
 	private int _attemptNum = 30;
 
 	[Export]
-	private Rect2I _region = new Rect2I(0, 0, 100, 100);
+	public Rect2I Region
+	{
+		get => _region;
+		set
+		{
+			if(_region == value)
+			{
+				return;
+			}
+			_region = value;
+			UpdateMultiMesh();
+		}
+	}
+	private Rect2I _region = new Rect2I(50, 50, 100, 100);
 
-	//private Mesh _mesh = new PlaneMesh()
-	//{ 
-	//	Size = new Vector2(0.5f, 0.5f)
-	//};
-	private Mesh _mesh = new BoxMesh()
+	
+    [Export]
+	public bool EnableMultithread
+	{
+		get => _enableMultithread;
+		set
+		{
+			_enableMultithread = value;
+			if(_enableMultithread == true)
+			{
+				_generatePointsFunction = PoissonDiscSampling.GeneratePointsParallel;
+			}
+			else
+			{
+				_generatePointsFunction = PoissonDiscSampling.GeneratePoints;
+			}
+		}
+	}
+
+	private bool _enableMultithread = true;
+    //private Mesh _mesh = new PlaneMesh()
+    //{ 
+    //	Size = new Vector2(0.5f, 0.5f)
+    //};
+    private Mesh _mesh = new BoxMesh()
 	{
 		Size = new Vector3(0.2f, 0.2f, 0.2f)
 	};
 
 	private Image _mask;
+
 	private MultiMeshInstance3D _meshInstance;
+
+	private MultiMesh _multiMesh;
+
+	private delegate IEnumerable<Vector2> GeneratePointsFunction(float radius, Rect2I region, 
+		int attemptNum = 30, Image mask = null);
+
+    private GeneratePointsFunction _generatePointsFunction = PoissonDiscSampling.GeneratePointsParallel;
+    
 	public override void _Ready()
 	{
         _mask = GD.Load<Image>("res://mask.png");
@@ -49,9 +103,15 @@ public partial class Test : Node
             GD.Print("mask import incorrectly");
         }
 
+        _multiMesh = new MultiMesh()
+        {
+            Mesh = _mesh,
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+        };
+		UpdateMultiMesh();
         _meshInstance = new MultiMeshInstance3D()
 		{
-			Multimesh = GenerateMultiMesh()
+			Multimesh = _multiMesh
 		};
 		AddChild(_meshInstance);
     }
@@ -60,29 +120,31 @@ public partial class Test : Node
 	public override void _Process(double delta)
 	{
 	}
-	private MultiMesh GenerateMultiMesh()
+
+	private void UpdateMultiMesh()
 	{
         Stopwatch stopwatch = Stopwatch.StartNew();
-        List<Vector2> points = PoissonDiscSampling.GeneratePointsParallel(Radius, _region, _attemptNum, _mask).ToList();
+
+        IEnumerable<Vector2> points = _generatePointsFunction(Radius, _region, _attemptNum);
 
         stopwatch.Stop();
+
         GD.Print($"GeneratePoints cost: {stopwatch.ElapsedMilliseconds} ms");
+
         stopwatch.Restart();
 
-        MultiMesh multiMesh = new MultiMesh()
-        {
-            Mesh = _mesh,
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            InstanceCount = points.Count,
-        };
-        for (int i = 0; i < points.Count; i++)
-        {
-            Transform3D transform = new(Basis.Identity, new Vector3(points[i].X, 0, points[i].Y));
-            multiMesh.SetInstanceTransform(i, transform);
+		int pointCount = points.Count();
+        _multiMesh.InstanceCount = pointCount;
+
+		int index = 0;
+		foreach (Vector2 point in points)
+		{
+            Transform3D transform = new(Basis.Identity, new Vector3(point.X, 0, point.Y));
+            _multiMesh.SetInstanceTransform(index++, transform);
         }
         stopwatch.Stop();
+
         GD.Print($"Generate mesh cost: {stopwatch.ElapsedMilliseconds} ms");
-		GD.Print($"point count: {points.Count}");
-        return multiMesh;
+        GD.Print($"point count: {pointCount}");
     }
 }
